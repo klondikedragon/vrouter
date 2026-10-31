@@ -1,8 +1,8 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
 
 import 'package:vrouter/src/vrouter_core.dart';
 import 'package:vrouter/src/vrouter_scope.dart';
+import 'package:web/web.dart' as web;
 
 /// List of static methods to interact with the browser
 /// Only one is implemented for mobile: pushExternal
@@ -17,9 +17,9 @@ class BrowserHelpers {
   static String getPathAndQuery({required VRouterMode routerMode}) {
     // If the mode is hash, it's easy we just take whatever is after the hash
     if (routerMode == VRouterMode.hash) {
-      return html.window.location.hash.isEmpty
+      return web.window.location.hash.isEmpty
           ? ''
-          : html.window.location.hash.substring(1);
+          : web.window.location.hash.substring(1);
     }
 
     // else, we have to be careful with the basePath
@@ -38,17 +38,17 @@ class BrowserHelpers {
   }
 
   /// Allows us to tell the browser to navigate in the browser history
-  static void browserGo(int delta) => html.window.history.go(delta);
+  static void browserGo(int delta) => web.window.history.go(delta);
 
   /// Fires an event when the url changes
-  static Stream<html.PopStateEvent> get onBrowserPopState =>
-      html.window.onPopState;
+  static Stream<web.PopStateEvent> get onBrowserPopState =>
+      web.window.onPopState;
 
   /// Fires an event when a page will be unloaded
   ///
   /// This mainly occurs when a user types a url in the browser on closes the browser
-  static Stream<html.Event> get onBrowserBeforeUnload =>
-      html.window.onBeforeUnload;
+  static Stream<web.Event> get onBrowserBeforeUnload =>
+      web.EventStreamProviders.beforeUnloadEvent.forTarget(web.window);
 
   /// Pushes a url which is from another website
   ///
@@ -57,9 +57,9 @@ class BrowserHelpers {
       {required bool openNewTab}) async {
     final targetUrl = url.startsWith('http') ? url : 'http://$url';
     if (openNewTab) {
-      html.window.open(targetUrl, '_blank');
+      web.window.open(targetUrl, '_blank');
     } else {
-      html.window.location.href = targetUrl;
+      web.window.location.href = targetUrl;
     }
   }
 
@@ -73,32 +73,29 @@ class BrowserHelpers {
     required VRouterMode routerMode,
     required bool isReplacement,
   }) {
-    // Either push or replace depending on [isReplacement]
-    final historyMethod = isReplacement
-        ? html.window.history.replaceState
-        : html.window.history.pushState;
-
-    historyMethod(
-      html.window.history.state, // Note that we don't change the historyState
-      'flutter',
-      _getBasePath() +
-          ((routerMode == VRouterMode.hash) ? '#/' : '') +
-          (url.startsWith('/') ? url.substring(1) : url),
-    );
+    final historyState = web.window.history.state;
+    final targetUrl = _getBasePath() +
+        ((routerMode == VRouterMode.hash) ? '#/' : '') +
+        (url.startsWith('/') ? url.substring(1) : url);
+    if (isReplacement) {
+      web.window.history.replaceState(historyState, 'flutter', targetUrl);
+    } else {
+      web.window.history.pushState(historyState, 'flutter', targetUrl);
+    }
   }
 
   /// Returns the base path (ending with a '/')
   ///
   /// The base path is:
-  ///   protocol + '//' + host + basePath (uri from the first <base> tag)
+  ///   protocol + '//' + host + basePath (uri from the first `<base>` tag)
   static String _getBasePath() {
-    final baseTags = html.document.getElementsByTagName('base');
+    final baseTags = web.document.getElementsByTagName('base');
 
-    return baseTags.isEmpty ? '/' : (baseTags[0].baseUri ?? '/');
+    return baseTags.length == 0 ? '/' : baseTags.item(0)!.baseURI;
   }
 
   /// Returns the entire url
-  static String _getEntireUrl() => html.window.location.href;
+  static String _getEntireUrl() => web.window.location.href;
 
   /// Get the number of history entries for this app
   ///
@@ -106,7 +103,7 @@ class BrowserHelpers {
   /// Note that this is NOT the history length of the browser
   static int getHistoryLength({required int applicationInstanceId}) {
     final String? historyLengthString =
-        html.window.localStorage['$applicationInstanceId'];
+        web.window.localStorage.getItem('$applicationInstanceId');
 
     if (historyLengthString == null) {
       throw Exception('Tried to get historyLength but it has not been set');
@@ -123,8 +120,8 @@ class BrowserHelpers {
     required int applicationInstanceId,
     required int historyLength,
   }) {
-    html.window.localStorage
-        .addAll({'$applicationInstanceId': '$historyLength'});
+    web.window.localStorage
+        .setItem('$applicationInstanceId', '$historyLength');
   }
 
   /// This replace the current history state by the new given one
@@ -133,16 +130,17 @@ class BrowserHelpers {
   /// only 'state' should be changed
   static void setAppHistoryState(Map<String, String> state) {
     final historyState = _getHistoryState();
-    historyState['app'] = state;
+    historyState.app = state.jsify();
     _setHistoryState(historyState);
   }
 
   static Map<String, String> getAppHistoryState() {
     final Map<String, String>? appHistoryState =
-        (_getHistoryState()['app'] as Map<dynamic, dynamic>?)?.map(
+        (_getHistoryState().app.dartify() as Map<dynamic, dynamic>?)?.map(
       (key, value) => MapEntry(
         key.toString(),
-        value.toString(),
+        // WASM dartify returns doubles; retain the browser's number spelling.
+        value is num ? _jsString(value.jsify()) : value.toString(),
       ),
     );
 
@@ -155,24 +153,24 @@ class BrowserHelpers {
 
   static void setHistoryIndex(int historyIndex) {
     final historyState = _getHistoryState();
-    historyState['historyIndex'] = historyIndex;
+    historyState.historyIndex = historyIndex;
     _setHistoryState(historyState);
   }
 
   /// We use a custom state entry called 'historyIndex'
   /// This is used by this plugin to keep track of where we are
   /// in the browser history
-  static int getHistoryIndex() => _getHistoryState()['historyIndex'] ?? 0;
+  static int getHistoryIndex() => _getHistoryState().historyIndex ?? 0;
 
   static void setApplicationInstanceId(int applicationInstanceId) {
     final historyState = _getHistoryState();
-    historyState['applicationInstanceId'] = applicationInstanceId;
+    historyState.applicationInstanceId = applicationInstanceId;
     _setHistoryState(historyState);
   }
 
   static int getApplicationInstanceId() {
     final int? applicationInstanceId =
-        _getHistoryState()['applicationInstanceId'];
+        _getHistoryState().applicationInstanceId;
 
     if (applicationInstanceId == null) {
       throw Exception(
@@ -181,42 +179,65 @@ class BrowserHelpers {
     return applicationInstanceId;
   }
 
-  static Map<String, dynamic> _getHistoryState() {
-    var globalState = html.window.history.state;
+  static _HistoryState _getHistoryState() {
+    final globalState = web.window.history.state;
 
-    // If no history state has ever been created and
-    // Flutter has not been initialized
     if (globalState == null) {
-      return <String, dynamic>{};
+      return _HistoryState(JSObject());
     }
 
-    // If globalState is NOT null but globalState['state'] is null
-    // Flutter has just hot reloaded and is therefore globalState['state']
-    // was placed in globalState
-    if (!globalState.containsKey('state') || globalState['state'] == null) {
-      return _mapDynamicDynamicToMapStringDynamic(globalState);
+    final historyState = _HistoryState(globalState as JSObject);
+    // Flutter wraps router state after restoring browser history.
+    // Hot reload can leave the router state at the top level instead.
+    if (!_hasOwnProperty(historyState, 'state') || historyState.state == null) {
+      return _copyHistoryState(historyState);
     }
 
-    // If a history state exist and Flutter has restored it
-    return _mapDynamicDynamicToMapStringDynamic(globalState['state']);
+    return _copyHistoryState(historyState.state as JSObject);
   }
 
-  static void _setHistoryState(Map<String, dynamic> historyState) {
-    var globalState = html.window.history.state ?? <String, dynamic>{};
+  static void _setHistoryState(_HistoryState historyState) {
+    final globalState = web.window.history.state;
 
-    // If Flutter has not yet restored the history state
-    if (!globalState?.containsKey('state')) {
-      return html.window.history.replaceState(historyState, 'flutter', null);
+    if (globalState == null ||
+        !_hasOwnProperty(globalState as JSObject, 'state')) {
+      web.window.history.replaceState(historyState, 'flutter', null);
+      return;
     }
 
-    // If a history state exist and Flutter has restored it
-    globalState['state'] = historyState;
-    globalState['serialCount'] =
-        0; // Reset to 0 to avoid issues with flutter hot reload
-    return html.window.history.replaceState(globalState, 'flutter', null);
+    // Retain Flutter's wrapper and unrelated structured-clone values.
+    final flutterState = _HistoryState(globalState);
+    flutterState.state = historyState;
+    flutterState.serialCount = 0;
+    web.window.history.replaceState(flutterState, 'flutter', null);
   }
+}
 
-  static Map<String, dynamic> _mapDynamicDynamicToMapStringDynamic(
-          Map<dynamic, dynamic> map) =>
-      map.map((key, value) => MapEntry(key.toString(), value));
+// Copy the map layer without converting unrelated values or creating a cycle
+// when Flutter's wrapper contains a null state.
+_HistoryState _copyHistoryState(JSObject state) =>
+    _HistoryState(_assignObject(_createObject(null), state));
+
+@JS('String')
+external String _jsString(JSAny? value);
+
+@JS('Object.assign')
+external JSObject _assignObject(JSObject target, JSObject source);
+
+@JS('Object.create')
+external JSObject _createObject(JSAny? prototype);
+
+@JS('Object.prototype.hasOwnProperty.call')
+external bool _hasOwnProperty(JSObject object, String property);
+
+extension type _HistoryState(JSObject _) implements JSObject {
+  external JSAny? get state;
+  external set state(JSAny? value);
+  external JSAny? get app;
+  external set app(JSAny? value);
+  external int? get historyIndex;
+  external set historyIndex(int? value);
+  external int? get applicationInstanceId;
+  external set applicationInstanceId(int? value);
+  external set serialCount(int value);
 }

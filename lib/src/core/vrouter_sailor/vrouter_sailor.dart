@@ -7,7 +7,7 @@ abstract class VRouterSailor implements VRouterNavigator, VRouterData {}
 
 /// Same as [VRouterSailor] except that [VRouter] has been
 /// initialized so we are sure to have a url
-abstract class InitializedVRouterSailor implements VRouterSailor {
+abstract mixin class InitializedVRouterSailor implements VRouterSailor {
   @override
   String get url;
 

@@ -6,7 +6,7 @@ import 'package:vrouter/src/core/vredirector.dart';
 /// [VRouteElement] is the base class for any object used in routes, stackedRoutes
 /// or nestedRoutes
 @immutable
-abstract class VRouteElement {
+abstract mixin class VRouteElement {
   /// [buildRoute] must return [VRoute] if it constitute (which its subroutes or not) a valid
   /// route given the input parameters
   /// [VRoute] should describe this valid route

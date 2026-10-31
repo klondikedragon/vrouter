@@ -1668,7 +1668,12 @@ class VRouterDelegate extends RouterDelegate<RouteInformation>
             )
           : <String, String>{};
 
-      int? newHistoryIndex = routeState?['historyIndex'];
+      // Browser numbers reach Dart as doubles under WASM.
+      final historyIndexNumber = routeState?['historyIndex'] as num?;
+      final newHistoryIndex = historyIndexNumber?.toInt();
+      if (historyIndexNumber != newHistoryIndex) {
+        throw FormatException('Invalid browser history index', historyIndexNumber);
+      }
 
       // Check if this is the first route
       if (newHistoryIndex == null || newHistoryIndex == 0) {

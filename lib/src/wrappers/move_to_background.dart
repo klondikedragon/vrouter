@@ -1,6 +1,6 @@
 import 'platform/platform_none.dart'
     if (dart.library.io) 'platform/platform_io.dart'
-    if (dart.library.js) 'platform/platform_web.dart';
+    if (dart.library.js_interop) 'platform/platform_web.dart';
 
 /// This library is a wrapper for iOS and Android to send the application to the background programmatically.
 import 'dart:async';
