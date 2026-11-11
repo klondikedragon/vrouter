@@ -1714,10 +1714,10 @@ class VRouterDelegate extends RouterDelegate<RouteInformation>
                 ? -1
                 : _vRouterScope.vHistory.historyIndex - newHistoryIndex;
 
-            // If we can't go simply don't
-            if (!historyCanGo(historyDelta)) {
-              return;
-            }
+            // No reachability check: the browser already moved to the new entry, and the jump
+            // lands on the entry the app still shows, which exists. Judging the jump from the
+            // app's own (unmoved) position refused it whenever that entry was the newest, which
+            // left the address bar on the URL the navigation was stopped from reaching.
 
             // If delta is 0 just stay
             if (historyDelta == 0) {
